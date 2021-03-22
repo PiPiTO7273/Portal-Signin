@@ -1,0 +1,361 @@
+
+#include"hsp3utf.as"
+#include"user32.as"
+#include"a2d.hsp"
+#include"ipmpackb.hsp"
+#include"hspinet.as"
+
+#packopt hide 1
+#packopt icon "portal-icon.ico"
+gsel sMain,-1
+
+#enum sMain		=	0
+#enum sCopy
+#enum sButton_Back
+#enum sButton_Login
+#enum sButton_Register
+
+#enum iLogo		=	0
+#enum iButton_Back
+#enum iButton_Login
+#enum iButton_Register
+#enum iInput_Active
+#enum iInput_Passive
+#enum iGuide_Connect
+#enum iGuide_Register
+#enum iGuide_RegisterDone
+#enum iGuide_Hello
+#enum iGuide_AlreadyExist
+#enum iGuide_Error
+
+#addition"AdminKey.hsp"
+
+	alCreateImageByFile iLogo,"Image/Online/Logo_Online.png"
+	alCreateImageByFile iButton_Back,"Image/Online/Button_Back.png"
+	alCreateImageByFile iButton_Login,"Image/Online/Button_Login.png"
+	alCreateImageByFile iButton_Register,"Image/Online/Button_Register.png"
+	alCreateImageByFile iInput_Active,"Image/Online/Input_Active.png"
+	alCreateImageByFile iInput_Passive,"Image/Online/Input_Passive.png"
+	alCreateImage iGuide_Connect,480,32
+		alSelectImage iGuide_Connect
+		alFont"Yu Gothic UI",16:alColor 50,50,50
+		alDrawText"Portalサービスに接続中・・・",0,0,480,32,1,1
+	alCreateImage iGuide_Register,480,32
+		alSelectImage iGuide_Register
+		alFont"Yu Gothic UI",16:alColor 50,50,50
+		alDrawText"アカウントを作成しています・・・",0,0,480,32,1,1
+	alCreateImage iGuide_RegisterDone,480,64
+		alSelectImage iGuide_RegisterDone
+		alFont"Yu Gothic UI",16:alColor 50,50,50
+		alDrawText"アカウントの作成が完了しました。\nサインイン画面に戻ります。",0,0,480,64,1,1
+	alCreateImage iGuide_AlreadyExist,480,64
+		alSelectImage iGuide_AlreadyExist
+		alFont"Yu Gothic UI",16:alColor 50,50,50
+		alDrawText"指定されたユーザー名は既に存在するため、使用できません。\nサインイン画面に戻ります。",0,0,480,64,1,1
+	alCreateImage iGuide_Error,480,64
+		alSelectImage iGuide_Error
+		alFont"Yu Gothic UI",16:alColor 50,50,50
+		alDrawText"アカウントの作成の途中で、エラーが発生しました。\nサインイン画面に戻ります。",0,0,480,64,1,1
+
+	buffer sButton_Back,72,24
+		alCopyImageToScreen iButton_Back,sButton_Back
+	buffer sButton_Login,150,120
+		alCopyImageToScreen iButton_Login,sButton_Login
+	buffer sButton_Register,150,120
+		alCopyImageToScreen iButton_Register,sButton_Register
+
+	netinit
+	ftpopen SERVICE_HOST,SERVICE_USERNAME,SERVICE_PASSWORD
+	sdim ftpcurdir:ftpdir ftpcurdir,"svcsavedata"
+
+*Startup
+
+	bgscr sMain,480,512,2,ginfo(20)/2-480/2,ginfo(21)/2-512/2
+	title"Portalにサインイン"
+
+	GetWindowLongA hwnd,-20 
+	SetWindowLongA hwnd,-20,stat|0x00080000
+	SetLayeredWindowAttributes hwnd,0,0,2
+	gsel sMain,1
+
+	dim defposx:dim defposy
+	dim resizewidth:dim resizeheight
+	defposx=ginfo(4):defposy=ginfo(5)
+	repeat 15
+		setease 0.9,1,ease_cubic_out
+		resizewidth=int(480.0*geteasef(cnt,15))
+		resizeheight=int(512.0*geteasef(cnt,15))
+		setease 0,255,ease_cubic_out
+		SetLayeredWindowAttributes hwnd,0,getease(cnt,15),2
+		width resizewidth,resizeheight,defposx+480/2-resizewidth/2,defposy+512/2-resizeheight/2
+		await 1000/60
+	loop
+
+	//背景
+	color 200,200,200:boxf
+	color 255,255,255:boxf 1,1,ginfo(12)-2,ginfo(13)-2
+
+	dim ActiveBoxID
+	dim DrawImageID
+	dim Restartflag
+
+	onclick gosub*ClickCheck
+
+	repeat
+
+		redraw 0
+
+		//背景
+		color 200,200,200:boxf
+		color 255,255,255:boxf 1,1,ginfo(12)-2,ginfo(13)-2
+
+		setease 0,1,ease_cubic_out
+		alCopyModeAlpha geteasef(cnt,25)
+		setease 16,0,ease_cubic_out
+		alCopyImageToScreen iLogo,sMain,90,96+getease(cnt,25)
+
+		//ユーザー名
+		font"Yu Gothic UI",14,1
+		setease 255,50,ease_cubic_out
+		color getease(cnt,25),getease(cnt,25),getease(cnt,25)
+		setease -16,0,ease_cubic_out
+		pos 62+getease(cnt,25),218:mes"ユーザー名"
+
+		//パスワード
+		font"Yu Gothic UI",14,1
+		setease 255,50,ease_cubic_out
+		color getease(cnt-5,25),getease(cnt-5,25),getease(cnt-5,25)
+		setease -16,0,ease_cubic_out
+		pos 62+getease(cnt-5,25),253:mes"パスワード"
+
+		//戻るボタン
+		setease 0,1,ease_cubic_out
+		alCopyModeAlpha geteasef(cnt-10,25)
+		setease -32,0,ease_cubic_out
+		alCopyImageToScreen iButton_Back,sMain,16+getease(cnt-10,25),16,24,24
+
+		//タイトル
+		font"Yu Gothic UI",14
+		setease 255,50,ease_cubic_out
+		color getease(cnt-20,25),getease(cnt-20,25),getease(cnt-20,25)
+		setease -16,0,ease_cubic_out
+		pos 60+getease(cnt-20,25),18:mes"サインイン"
+
+		//入力ボックス
+		if ActiveBoxID==0 :DrawImageID=iInput_Active:else:DrawImageID=iInput_Passive
+		setease 0,1,ease_cubic_out
+		alCopyModeAlpha geteasef(cnt-10,25)
+		setease -16,0,ease_cubic_out
+		alCopyImageToScreen DrawImageID,sMain,162+getease(cnt-10,25),216
+		if ActiveBoxID==1 :DrawImageID=iInput_Active:else:DrawImageID=iInput_Passive
+		setease 0,1,ease_cubic_out
+		alCopyModeAlpha geteasef(cnt-15,25)
+		setease -16,0,ease_cubic_out
+		alCopyImageToScreen DrawImageID,sMain,162+getease(cnt-15,25),251
+
+		//サインインボタン
+		setease 0,1,ease_cubic_oun
+		alCopyModeAlpha geteasef(cnt-20,25)
+		setease 32,0,ease_cubic_out
+		alCopyImageToScreen iButton_Login,sMain,164,370+getease(cnt-20,25),150,40
+
+		//アカウント作成ボタン
+		setease 0,1,ease_cubic_out
+		alCopyModeAlpha geteasef(cnt-25,25)
+		setease 32,0,ease_cubic_out
+		alCopyImageToScreen iButton_Register,sMain,164,426+getease(cnt-25,25),150,40
+
+		redraw 1
+
+		if cnt==40 :gosub*SetObj_Input
+		if cnt==50 :gosub*SetObj_Button
+		objsel -1
+		ActiveBoxID=stat
+
+		if Restartflag==1 :break
+
+		await 1000/60
+
+	loop
+
+	goto*Startup
+
+*SetObj_Input
+	//入力ボックス
+	font"Meiryo UI",14:objmode 2
+	sdim LoginUserName
+	sdim LoginPassword
+	pos 162+4,216+1:input LoginUserName,256-8,25-2,128
+	pos 162+4,251+1:input LoginPassword,256-8,25-2,128
+	GetWindowLong objinfo(0,2),-20
+	SetWindowLong objinfo(0,2),-20,stat&$FFFFFDFF
+	SetWindowPos objinfo(0,2),0,0,0,0,0,$0027
+	GetWindowLong objinfo(1,2),-20
+	SetWindowLong objinfo(1,2),-20,stat&$FFFFFDFF
+	SetWindowPos objinfo(1,2),0,0,0,0,0,$0027
+	sendmsg objinfo(1,2),$CC,'*'
+
+	//閉じるボタン
+	objsize 24,24
+	objimage sButton_Back,0,0,24,0,48,0
+	pos 16,16:button"",*Exit
+	return
+
+*SetObj_Button
+	//サインインボタン
+	objsize 150,40:objimage sButton_Login,0,0,0,40,0,80
+	pos 164,370:button gosub"",*Action_Signin
+	objsize 150,40:objimage sButton_Register,0,0,0,40,0,80
+	pos 164,426:button gosub"",*Action_Register
+	return
+
+*Action_Signin
+	if LoginUserName=="" :return
+	if LoginPassword=="" :return
+
+	gosub*WindowClose
+
+	sdim RegUserBuf
+	RegUserBuf+"[ONLINEAUTH]\n"
+	RegUserBuf+"ID="+LoginUserName+"\n"
+	RegUserBuf+"KEY="+LoginPassword+"\n"
+	notesel RegUserBuf
+	notesave"OnlineAuth.dat"
+	end
+
+*Action_Register
+	if LoginUserName=="" :return
+	if LoginPassword=="" :return
+
+	buffer sCopy,480*3,512
+		color 255,255,255:boxf
+		;pos 0,0:gcopy sMain,0,0,480,512
+		pos 0,0:gzoom 480/4,512/4,sMain,0,0,480,512,1
+		ipmb_smoothinggauss 0,0,480/4,512/4,5,10
+		pos 0,0:gzoom 480,512,sCopy,0,0,480/4,512/4,1
+		pos 480,0:gcopy sMain,0,0,480,512
+	gsel sMain
+	clrobj
+
+	repeat 30
+
+		redraw 0
+			pos 0,0:gcopy sCopy,480,0,480,512
+			setease 0,256,ease_cubic_out
+			pos 0,0:gmode 3,480,512,getease(cnt,10):gcopy sCopy,0,0
+			setease 0,150,ease_cubic_out
+			pos 0,0:gmode 3,480,512,getease(cnt-5,10):gcopy sCopy,480*2,0
+			gmode 0
+
+			setease 0,1,ease_cubic_out
+			alCopyModeAlpha geteasef(cnt-10,20)
+			setease 32,0,ease_cubic_out
+			alCopyImageToScreen iGuide_Connect,sMain,0,512/2-32/2+getease(cnt-5,25),480,32,0,0
+		redraw 1
+
+		await 1000/60
+
+	loop
+
+	ftpdirlist
+	dim FTPres
+	repeat
+		netexec FTPres
+		if FTPres!0&cnt>40 :break
+		redraw 0
+			pos 0,0:gcopy sCopy,0,0,480,512
+			pos 0,0:gmode 3,480,512,150:gcopy sCopy,480*2,0
+			gmode 0
+
+			setease 0,1,ease_cubic_out
+			alCopyModeAlpha geteasef(cnt-5,25)
+			setease 32,0,ease_cubic_out
+			alCopyImageToScreen iGuide_Register,sMain,0,512/2-64/2+getease(cnt-5,25),480,64,0,0
+		redraw 1
+
+		await 1000/60
+	loop
+	sdim Curdirlist
+	ftpdirlist2 Curdirlist
+	if instr(Curdirlist,0,""+LoginUserName+".dat")==-1 {
+		DrawImageID=iGuide_RegisterDone
+		sdim SavedataBuf
+		SavedataBuf+"[SAVEDATA]\n"
+		SavedataBuf+"USERNAME="+LoginUserName+"\n"
+		sdim Encbuf,128
+		Encbuf=LoginPassword
+		rc4encode Encbuf,SERVICE_ENCKEY,64
+		b64encode Encbuf,Encbuf
+		SavedataBuf+"PASSWORD="+Encbuf+"\n"
+		SavedataBuf+"REG.DATE="+gettime(0)+"/"+gettime(1)+"/"+gettime(3)+"\n"
+		notesel SavedataBuf
+		notesave"ftpupload.tmp"
+		ftpput LoginUserName+".dat","ftpupload.tmp",0
+		if stat!0 :DrawImageID=iGuide_Error
+		delete"ftpupload.tmp"
+	} else {
+		DrawImageID=iGuide_AlreadyExist
+	}
+
+	alCreateImage iGuide_Hello,480,40
+		alSelectImage iGuide_Hello
+		alFont"Pier Sans",20:alColor 50,50,50
+		alDrawText"Hello, "+LoginUserName+" !",0,0,480,40,1,1
+
+	repeat 40
+		redraw 0
+			pos 0,0:gcopy sCopy,0,0,480,512
+			setease 150,255,ease_linear
+			pos 0,0:gmode 3,480,512,getease(cnt,20):gcopy sCopy,480*2,0
+			gmode 0
+
+			setease 0,1,ease_cubic_out
+			alCopyModeAlpha geteasef(cnt-5,25)
+			setease 32,0,ease_cubic_out
+			alCopyImageToScreen DrawImageID,sMain,0,512/2-64/2+getease(cnt-5,25),480,64,0,0
+
+			if DrawImageID==iGuide_RegisterDone {
+				setease 0,1,ease_cubic_out
+				alCopyModeAlpha geteasef(cnt-10,25)
+				setease 32,0,ease_cubic_out
+				alCopyImageToScreen iGuide_Hello,sMain,0,128+getease(cnt-10,25),480,40,0,0
+			}
+		redraw 1
+
+		await 1000/60
+	loop
+
+	gosub*WindowClose
+	Restartflag=1
+	return
+
+*WindowClose
+	buffer sCopy,480/3,512/3
+		pos 0,0:gzoom ginfo(12),ginfo(13),sMain,0,0,480,512,1
+	gsel sMain
+	clrobj
+
+	dim defposx:dim defposy
+	dim resizewidth:dim resizeheight
+	defposx=ginfo(4):defposy=ginfo(5)
+	repeat 15
+		setease 1,0.9,ease_cubic_out
+		resizewidth=int(480.0*geteasef(cnt,15))
+		resizeheight=int(512.0*geteasef(cnt,15))
+		setease 255,0,ease_cubic_out
+		SetLayeredWindowAttributes hwnd,0,getease(cnt,15),2
+		width resizewidth,resizeheight,defposx+480/2-resizewidth/2,defposy+512/2-resizeheight/2
+		pos 0,0:gzoom ginfo(12),ginfo(13),sCopy,0,0,480/3,512/3,1
+		await 1000/60
+	loop
+
+	return
+
+*ClickCheck
+	if wparam==1 :sendmsg hwnd,$00A1,2,0
+	return
+
+*Exit
+	gosub*WindowClose
+	ftpclose
+	end
